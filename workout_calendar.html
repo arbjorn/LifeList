@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Training Dashboard 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        /* Forced 7-column layout for the single-row weekly look */
+        .weekly-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.75rem;
+            min-width: 1000px;
+        }
+
+        .calendar-scroll-container {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+        }
+
+        .workout-card {
+            min-height: 110px;
+        }
+
+        .workout-card.completed {
+            opacity: 0.45;
+            filter: grayscale(0.8);
+        }
+
+        .workout-card.completed p {
+            text-decoration: line-through;
+        }
+
+        .habit-checkbox {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            background: #1e293b;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .habit-checkbox:checked {
+            background-color: #38bdf8;
+            border-color: #38bdf8;
+        }
+
+        .habit-checkbox:checked::after {
+            content: "✓";
+            color: #0f172a;
+            font-size: 11px;
+            position: absolute;
+            top: -1px;
+            left: 2px;
+            font-weight: bold;
+        }
+
+        .weight-input {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #f1f5f9;
+            font-size: 11px;
+            padding: 3px 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .weight-input:focus {
+            border-color: #38bdf8;
+        }
+
+        .task-input {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #f1f5f9;
+            font-size: 11px;
+            padding: 4px 8px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .task-input:focus {
+            border-color: #38bdf8;
+        }
+
+        .log-input {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #f1f5f9;
+            font-size: 12px;
+            padding: 4px 8px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .log-input:focus {
+            border-color: #38bdf8;
+            background: #1e293b;
+        }
+
+        .modal-enter {
+            animation: modalFadeIn 0.2s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-[1600px] mx-auto">
+        <!-- Header & Nav -->
+        <header class="flex flex-col lg:flex-row lg:items-center justify-between mb-8 gap-6">
+            <div>
+                <h1 class="text-3xl font-bold text-sky-400 tracking-tight">Training Dashboard</h1>
+                <p id="view-display" class="text-slate-400 font-medium mt-0.5"></p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-4">
+                <!-- View Mode Toggle (Week vs Day) -->
+                <div class="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center shadow-lg">
+                    <button id="btn-view-week" onclick="setViewMode('week')" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-sky-600 text-white shadow">
+                        Week
+                    </button>
+                    <button id="btn-view-day" onclick="setViewMode('day')" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">
+                        Day
+                    </button>
+                </div>
+
+                <!-- Navigation Controls -->
+                <div class="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 shadow-lg">
+                    <button onclick="navigateDate(-1)" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="Previous">
+                        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                    </button>
+                    <button onclick="resetToToday()" class="px-3.5 py-1 text-xs font-semibold text-slate-300 hover:text-white">
+                        Today
+                    </button>
+                    <button onclick="navigateDate(1)" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="Next">
+                        <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap items-center gap-3 mb-6 text-[10px] font-bold uppercase tracking-wider">
+            <span class="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-full">Upper Body</span>
+            <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full">Lower Body</span>
+            <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full">Running</span>
+            <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-full">Rest</span>
+        </div>
+
+        <!-- Main Dynamic View Container -->
+        <div id="main-view-container">
+            <!-- Injected by renderCurrentView() -->
+        </div>
+
+        <!-- Weight Analysis Section -->
+        <div class="mt-12 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <button onclick="toggleGraph()" class="w-full flex items-center justify-between p-6 hover:bg-slate-800/50 transition-colors">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="line-chart" class="text-sky-400"></i>
+                    <span class="text-lg font-bold text-white">Weight Analysis</span>
+                </div>
+                <i id="graph-chevron" data-lucide="chevron-down" class="text-slate-500 transition-transform"></i>
+            </button>
+            <div id="graph-container" class="hidden p-6 border-t border-slate-800">
+                <div class="h-[360px] w-full">
+                    <canvas id="weightChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Modal (for Weekly Quick Inspection) -->
+    <div id="modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl modal-enter overflow-hidden flex flex-col max-h-[90vh]">
+            <div id="modal-header" class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/90 sticky top-0 z-10">
+                <div>
+                    <h2 id="modal-title" class="text-xl font-bold text-white leading-tight">Workout Details</h2>
+                    <p id="modal-subtitle" class="text-xs text-sky-400 font-medium mt-0.5"></p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto space-y-4" id="modal-content"></div>
+            <div class="p-4 bg-slate-900/80 border-t border-slate-700 flex items-center justify-between text-xs text-slate-400">
+                <span>Logs save automatically for this date.</span>
+                <button onclick="closeModal()" class="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs transition-colors">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const workoutData = {
+            'Upper A': { color: 'rose', icon: 'dumbbell', exercises: [
+                { name: 'Bench Press', muscle: 'Chest, Triceps, Anterior Deltoids' },
+                { name: 'Incline Bench Press', muscle: 'Upper Pectorals, Anterior Deltoids' },
+                { name: 'Weighted Dips', muscle: 'Pectorals, Triceps, Anterior Deltoids' },
+                { name: 'Machine Pec Deck', muscle: 'Pectorals' },
+                { name: 'Lateral Raise', muscle: 'Lateral Deltoids' },
+                { name: 'Overhead Cable Tricep Extension', muscle: 'Triceps Brachii' },
+                { name: 'Dumbbell Shrugs', muscle: 'Upper Trapezius' },
+                { name: 'Cable Crunch', muscle: 'Rectus Abdominis' },
+                { name: 'Neck Curls & Extensions', muscle: 'Neck Muscles' }
+            ]},
+            'Lower Body': { color: 'emerald', icon: 'anvil', exercises: [
+                { name: 'Squat', muscle: 'Quadriceps, Glutes, Core' },
+                { name: 'Deadlift', muscle: 'Posterior Chain' },
+                { name: 'Romanian Deadlift', muscle: 'Hamstrings, Glutes' },
+                { name: 'Walking Lunge', muscle: 'Quads, Glutes, Hamstrings' },
+                { name: 'Leg Extension', muscle: 'Quadriceps' },
+                { name: 'Seated Leg Curl', muscle: 'Hamstrings' },
+                { name: 'Nautilus Glute Drive', muscle: 'Gluteus Maximus' },
+                { name: 'Standing Calf Raise', muscle: 'Calves' }
+            ]},
+            'Upper B': { color: 'rose', icon: 'armchair', exercises: [
+                { name: 'Pull-up', muscle: 'Lats, Biceps, Upper Back' },
+                { name: 'Chest Supported T-Bar Row', muscle: 'Rhomboids, Traps, Lats' },
+                { name: 'Overhead Press', muscle: 'Deltoids, Triceps' },
+                { name: 'Machine Lat Pullover', muscle: 'Lats, Serratus' },
+                { name: 'Reverse Pec Deck', muscle: 'Posterior Deltoids' },
+                { name: 'Preacher Curl', muscle: 'Biceps Brachii' },
+                { name: 'Bayesian Cable Curl', muscle: 'Biceps Brachii' },
+                { name: 'Dumbbell Wrist Curls & Extensions', muscle: 'Forearms' }
+            ]},
+            'Recovery Run': { color: 'amber', icon: 'footprints', exercises: [
+                { name: 'Duration: 30–45 mins', muscle: 'Active Recovery' },
+                { name: 'Intensity: Zone 2', muscle: 'Easy/Conversational' },
+                { name: 'Focus: Smooth turnover', muscle: 'Flatter terrain' }
+            ]},
+            'Tempo Run': { color: 'amber', icon: 'zap', exercises: [
+                { name: 'Duration: 40–50 mins', muscle: 'Aerobic Power' },
+                { name: 'Structure: 10m Warmup, 20-30m Tempo', muscle: 'Moderate Effort' },
+                { name: 'Intensity: Zone 3/4', muscle: 'Comfortably Hard' }
+            ]},
+            'Long Run': { color: 'amber', icon: 'map', exercises: [
+                { name: 'Duration: 60–90+ mins', muscle: 'Endurance' },
+                { name: 'Intensity: Zone 2', muscle: 'Aerobic Base' },
+                { name: 'Focus: Time on feet', muscle: 'Fat Metabolism' }
+            ]},
+            'Rest': { color: 'slate', icon: 'coffee', exercises: [
+                { name: 'Total Recovery', muscle: 'Deep rest and nutrition focus' }
+            ]}
+        };
+
+        const habits = ["Vitamins", "AM Walk & Water", "Read", "Pray", "Hygiene", "Food"];
+        const saturdayChores = ["Groceries", "Yard Work", "Laundry", "Vacuum"];
+        
+        const weeklySchedule = {
+            0: 'Long Run',
+            1: 'Rest',
+            2: 'Upper A',
+            3: 'Tempo Run',
+            4: 'Lower Body',
+            5: 'Recovery Run',
+            6: 'Upper B'
+        };
+
+        const columnOrder = [0, 1, 2, 3, 4, 5, 6];
+        let weightChart = null;
+
+        // Application State
+        let currentView = 'week'; // 'week' | 'day'
+        let activeDate = new Date();
+        activeDate.setHours(0, 0, 0, 0);
+
+        function formatDateKey(d) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function setViewMode(mode) {
+            currentView = mode;
+            
+            const btnWeek = document.getElementById('btn-view-week');
+            const btnDay = document.getElementById('btn-view-day');
+            
+            if (mode === 'week') {
+                btnWeek.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-sky-600 text-white shadow";
+                btnDay.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+            } else {
+                btnDay.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-sky-600 text-white shadow";
+                btnWeek.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+            }
+            renderCurrentView();
+        }
+
+        function navigateDate(direction) {
+            if (currentView === 'week') {
+                activeDate.setDate(activeDate.getDate() + (direction * 7));
+            } else {
+                activeDate.setDate(activeDate.getDate() + direction);
+            }
+            renderCurrentView();
+        }
+
+        function resetToToday() {
+            activeDate = new Date();
+            activeDate.setHours(0, 0, 0, 0);
+            renderCurrentView();
+        }
+
+        function jumpToDay(dateKeyStr) {
+            const parts = dateKeyStr.split('-');
+            activeDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
+            activeDate.setHours(0, 0, 0, 0);
+            setViewMode('day');
+        }
+
+        function renderCurrentView() {
+            if (currentView === 'week') {
+                renderWeeklyView();
+            } else {
+                renderDailyView();
+            }
+            lucide.createIcons();
+        }
+
+        /* ---------------- WEEKLY VIEW RENDERING ---------------- */
+        function renderWeeklyView() {
+            const container = document.getElementById('main-view-container');
+            
+            // Calculate current week's Sunday
+            const sunday = new Date(activeDate);
+            sunday.setDate(sunday.getDate() - sunday.getDay());
+            
+            const saturday = new Date(sunday);
+            saturday.setDate(saturday.getDate() + 6);
+
+            document.getElementById('view-display').innerText = 
+                `${sunday.toLocaleDateString('en-US', {month:'short', day:'numeric'})} – ${saturday.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})}`;
+
+            let gridCardsHtml = '';
+
+            columnOrder.forEach(dayOffset => {
+                const date = new Date(sunday);
+                date.setDate(date.getDate() + dayOffset);
+                const dateKey = formatDateKey(date);
+                const dayOfWeek = date.getDay();
+                const workoutType = weeklySchedule[dayOfWeek];
+                const workout = workoutData[workoutType];
+                const colorBase = workout.color;
+
+                const isComplete = localStorage.getItem(`${dateKey}-workout`) === 'true';
+                const currentWeight = localStorage.getItem(`${dateKey}-weight`) || '';
+
+                // Habits HTML
+                let habitsHtml = `<div class="mt-4 pt-4 border-t border-slate-800/60 flex flex-col gap-2.5">`;
+                
+                // Weight input
+                habitsHtml += `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Weight</span>
+                        <input type="number" step="0.1" value="${currentWeight}" 
+                               class="weight-input w-16" placeholder="0.0"
+                               onchange="saveWeight('${dateKey}', this.value)">
+                    </div>
+                `;
+
+                // Standard Habits
+                habits.forEach((habit, hIdx) => {
+                    const hSaved = localStorage.getItem(`${dateKey}-habit-${hIdx}`) === 'true';
+                    habitsHtml += `
+                        <label class="flex items-center gap-2.5 cursor-pointer group">
+                            <input type="checkbox" class="habit-checkbox" 
+                                   ${hSaved ? 'checked' : ''} 
+                                   onchange="saveHabit('${dateKey}', 'habit-${hIdx}', this.checked)">
+                            <span class="text-[10px] font-medium text-slate-400 group-hover:text-slate-200 transition-colors">${habit}</span>
+                        </label>
+                    `;
+                });
+
+                // Saturday Chores
+                if (dayOfWeek === 6) {
+                    habitsHtml += `<div class="mt-2 pt-2 border-t border-slate-800/30 flex flex-col gap-2.5">`;
+                    saturdayChores.forEach((chore, cIdx) => {
+                        const cSaved = localStorage.getItem(`${dateKey}-chore-${cIdx}`) === 'true';
+                        habitsHtml += `
+                            <label class="flex items-center gap-2.5 cursor-pointer group">
+                                <input type="checkbox" class="habit-checkbox" 
+                                       ${cSaved ? 'checked' : ''} 
+                                       onchange="saveHabit('${dateKey}', 'chore-${cIdx}', this.checked)">
+                                <span class="text-[10px] font-bold text-sky-400/80 group-hover:text-sky-400 transition-colors">${chore}</span>
+                            </label>
+                        `;
+                    });
+                    habitsHtml += `</div>`;
+                }
+
+                habitsHtml += `</div>`;
+
+                // Impromptu Tasks
+                const customTasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+                let tasksHtml = `
+                    <div class="mt-4 pt-3 border-t border-slate-800/60 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Tasks</span>
+                            <span class="text-[9px] text-slate-600 font-semibold">${customTasks.length}</span>
+                        </div>
+                        <div class="flex flex-col gap-1.5 max-h-[110px] overflow-y-auto pr-1" id="task-list-${dateKey}">
+                `;
+
+                customTasks.forEach((task, tIdx) => {
+                    tasksHtml += `
+                        <div class="flex items-center justify-between gap-1.5 group/item bg-slate-800/40 px-1.5 py-1 rounded">
+                            <label class="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
+                                <input type="checkbox" class="habit-checkbox" 
+                                       ${task.completed ? 'checked' : ''} 
+                                       onchange="toggleCustomTask('${dateKey}', ${tIdx})">
+                                <span class="text-[10px] text-slate-300 truncate ${task.completed ? 'line-through text-slate-500' : ''}">${task.text}</span>
+                            </label>
+                            <button onclick="removeCustomTask('${dateKey}', ${tIdx})" class="text-slate-600 hover:text-rose-400 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+
+                tasksHtml += `
+                        </div>
+                        <div class="flex items-center gap-1 mt-1">
+                            <input type="text" id="task-input-${dateKey}" 
+                                   class="task-input" placeholder="+ Add task..."
+                                   onkeydown="if(event.key==='Enter') addCustomTask('${dateKey}')">
+                            <button onclick="addCustomTask('${dateKey}')" class="px-2 py-1 bg-slate-800 hover:bg-sky-600 hover:text-white rounded text-[10px] font-bold text-slate-400 transition-colors">
+                                +
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                gridCardsHtml += `
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-lg hover:border-slate-700 transition-all">
+                        <div>
+                            <div class="flex justify-between items-start mb-3 cursor-pointer group/header" onclick="jumpToDay('${dateKey}')" title="Click to open Daily View">
+                                <div class="flex flex-col">
+                                    <span class="text-[9px] uppercase font-black tracking-widest text-slate-500 leading-none mb-1 group-hover/header:text-sky-400 transition-colors">
+                                        ${date.toLocaleDateString('en-US', {weekday: 'short'})}
+                                    </span>
+                                    <span class="text-lg font-bold text-white leading-none group-hover/header:text-sky-400 transition-colors">${date.getDate()}</span>
+                                </div>
+                                <span class="text-[9px] text-slate-600 group-hover/header:text-sky-400 font-semibold transition-colors">View →</span>
+                            </div>
+
+                            <div id="workout-${dateKey}" 
+                                 class="workout-card ${isComplete ? 'completed' : ''} bg-${colorBase}-500/10 border border-${colorBase}-500/20 p-3 rounded-xl transition-all flex flex-col relative group">
+                                
+                                <input type="checkbox" 
+                                       class="habit-checkbox absolute top-2 right-2 z-10 scale-75" 
+                                       ${isComplete ? 'checked' : ''} 
+                                       onclick="event.stopPropagation()"
+                                       onchange="toggleWorkout('${dateKey}')">
+
+                                <div class="cursor-pointer h-full" onclick="showDetailsModal('${workoutType}', '${dateKey}')">
+                                    <div class="flex items-center gap-1.5 mb-1.5">
+                                        <i data-lucide="${workout.icon}" class="w-3 h-3 text-${colorBase}-400"></i>
+                                        <span class="text-[8px] font-black uppercase text-${colorBase}-400 tracking-tighter">${workoutType}</span>
+                                    </div>
+                                    <p class="text-[10px] font-semibold text-slate-200 leading-tight line-clamp-2">${workout.exercises[0].name}</p>
+                                    <span class="text-[8px] text-sky-400/80 mt-1.5 inline-block font-semibold">Click to log sets →</span>
+                                </div>
+                            </div>
+
+                            ${habitsHtml}
+                        </div>
+
+                        ${tasksHtml}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="calendar-scroll-container">
+                    <div class="weekly-grid">
+                        ${gridCardsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        /* ---------------- DAILY VIEW RENDERING ---------------- */
+        function renderDailyView() {
+            const container = document.getElementById('main-view-container');
+            const dateKey = formatDateKey(activeDate);
+            const dayOfWeek = activeDate.getDay();
+            const workoutType = weeklySchedule[dayOfWeek];
+            const workout = workoutData[workoutType];
+            const colorBase = workout.color;
+
+            const isComplete = localStorage.getItem(`${dateKey}-workout`) === 'true';
+            const currentWeight = localStorage.getItem(`${dateKey}-weight`) || '';
+            const customTasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+            const isLifting = workoutType.includes('Upper') || workoutType.includes('Lower');
+
+            document.getElementById('view-display').innerText = 
+                activeDate.toLocaleDateString('en-US', {weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'});
+
+            // Exercises Interactive List
+            let exercisesListHtml = '';
+            workout.exercises.forEach((ex, idx) => {
+                const weightVal = localStorage.getItem(`${dateKey}-ex-${idx}-weight`) || '';
+                const repsVal = localStorage.getItem(`${dateKey}-ex-${idx}-reps`) || '';
+                const notesVal = localStorage.getItem(`${dateKey}-ex-${idx}-notes`) || '';
+
+                exercisesListHtml += `
+                    <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-700 transition-colors">
+                        <div class="flex items-start gap-3 flex-1 min-w-0">
+                            <div class="mt-1.5 w-2.5 h-2.5 rounded-full bg-${workout.color}-500 flex-shrink-0 shadow-[0_0_8px_rgba(255,255,255,0.2)]"></div>
+                            <div>
+                                <h4 class="font-bold text-slate-100 text-sm">${ex.name}</h4>
+                                <p class="text-xs text-slate-400 mt-0.5">${ex.muscle}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800">
+                `;
+
+                if (isLifting) {
+                    exercisesListHtml += `
+                        <div class="flex items-center gap-2">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weight</label>
+                            <input type="text" value="${weightVal}" 
+                                   placeholder="lbs" 
+                                   class="log-input w-24 text-center font-semibold"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'weight', this.value)">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reps</label>
+                            <input type="text" value="${repsVal}" 
+                                   placeholder="e.g. 10,8,8" 
+                                   class="log-input w-28 text-center font-semibold"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'reps', this.value)">
+                        </div>
+                    `;
+                } else {
+                    exercisesListHtml += `
+                        <div class="flex items-center gap-2 w-full md:w-auto">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notes</label>
+                            <input type="text" value="${notesVal}" 
+                                   placeholder="Time, pace, distance..." 
+                                   class="log-input w-full md:w-64 text-left"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'notes', this.value)">
+                        </div>
+                    `;
+                }
+
+                exercisesListHtml += `
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Habits Section HTML for Daily View
+            let dailyHabitsHtml = '';
+            habits.forEach((habit, hIdx) => {
+                const hSaved = localStorage.getItem(`${dateKey}-habit-${hIdx}`) === 'true';
+                dailyHabitsHtml += `
+                    <label class="flex items-center gap-3 p-3 bg-slate-900/60 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition-colors">
+                        <input type="checkbox" class="habit-checkbox" 
+                               ${hSaved ? 'checked' : ''} 
+                               onchange="saveHabit('${dateKey}', 'habit-${hIdx}', this.checked)">
+                        <span class="text-xs font-semibold text-slate-300">${habit}</span>
+                    </label>
+                `;
+            });
+
+            // Saturday Chores for Daily View
+            let dailyChoresHtml = '';
+            if (dayOfWeek === 6) {
+                dailyChoresHtml = `
+                    <div class="mt-6 pt-6 border-t border-slate-800">
+                        <h4 class="text-xs font-black uppercase text-sky-400 tracking-wider mb-3">Saturday Chores</h4>
+                        <div class="grid grid-cols-2 gap-3">
+                `;
+                saturdayChores.forEach((chore, cIdx) => {
+                    const cSaved = localStorage.getItem(`${dateKey}-chore-${cIdx}`) === 'true';
+                    dailyChoresHtml += `
+                        <label class="flex items-center gap-3 p-3 bg-slate-900/60 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition-colors">
+                            <input type="checkbox" class="habit-checkbox" 
+                                   ${cSaved ? 'checked' : ''} 
+                                   onchange="saveHabit('${dateKey}', 'chore-${cIdx}', this.checked)">
+                            <span class="text-xs font-bold text-sky-400">${chore}</span>
+                        </label>
+                    `;
+                });
+                dailyChoresHtml += `</div></div>`;
+            }
+
+            // Impromptu Tasks for Daily View
+            let dailyTasksHtml = '';
+            customTasks.forEach((task, tIdx) => {
+                dailyTasksHtml += `
+                    <div class="flex items-center justify-between gap-3 p-2.5 bg-slate-900/60 border border-slate-800 rounded-xl group/item">
+                        <label class="flex items-center gap-3 cursor-pointer min-w-0 flex-1">
+                            <input type="checkbox" class="habit-checkbox" 
+                                   ${task.completed ? 'checked' : ''} 
+                                   onchange="toggleCustomTask('${dateKey}', ${tIdx})">
+                            <span class="text-xs font-medium text-slate-200 truncate ${task.completed ? 'line-through text-slate-500' : ''}">${task.text}</span>
+                        </label>
+                        <button onclick="removeCustomTask('${dateKey}', ${tIdx})" class="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition-colors">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <!-- Left: Main Workout Focus -->
+                    <div class="lg:col-span-8 flex flex-col gap-6">
+                        <!-- Workout Header Card -->
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div class="flex items-center gap-4">
+                                <div class="p-4 bg-${colorBase}-500/10 border border-${colorBase}-500/30 rounded-2xl text-${colorBase}-400">
+                                    <i data-lucide="${workout.icon}" class="w-8 h-8"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-3 mb-1">
+                                        <span class="text-xs font-black uppercase tracking-wider text-${colorBase}-400">${workoutType}</span>
+                                        <span class="text-xs text-slate-500">•</span>
+                                        <span class="text-xs text-slate-400">${workout.exercises.length} items</span>
+                                    </div>
+                                    <h2 class="text-2xl font-bold text-white">${workout.exercises[0].name}</h2>
+                                </div>
+                            </div>
+
+                            <label class="flex items-center gap-3 p-3.5 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 rounded-xl cursor-pointer transition-colors">
+                                <input type="checkbox" class="habit-checkbox scale-110" 
+                                       ${isComplete ? 'checked' : ''} 
+                                       onchange="toggleWorkout('${dateKey}')">
+                                <span class="text-xs font-bold text-white uppercase tracking-wider">Workout Finished</span>
+                            </label>
+                        </div>
+
+                        <!-- Exercises Log List -->
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-4">
+                            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Exercise Breakdown & Logging</h3>
+                                <span class="text-xs text-slate-500">Auto-saved to date</span>
+                            </div>
+                            <div class="flex flex-col gap-3">
+                                ${exercisesListHtml}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Habits, Tasks & Metrics -->
+                    <div class="lg:col-span-4 flex flex-col gap-6">
+                        <!-- Weight Logger Card -->
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="scale" class="text-sky-400 w-5 h-5"></i>
+                                <div>
+                                    <h4 class="text-xs font-black uppercase tracking-wider text-white">Daily Weight</h4>
+                                    <p class="text-[11px] text-slate-500">Morning check-in</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" step="0.1" value="${currentWeight}" 
+                                       class="weight-input w-24 text-center font-bold text-sm" placeholder="0.0"
+                                       onchange="saveWeight('${dateKey}', this.value)">
+                                <span class="text-xs font-bold text-slate-400">lbs</span>
+                            </div>
+                        </div>
+
+                        <!-- Daily Habits Card -->
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                            <h3 class="text-xs font-black uppercase tracking-wider text-slate-400 mb-4">Daily Habits</h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                ${dailyHabitsHtml}
+                            </div>
+                            ${dailyChoresHtml}
+                        </div>
+
+                        <!-- Impromptu Tasks Card -->
+                        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-xs font-black uppercase tracking-wider text-slate-400">Impromptu Tasks</h3>
+                                <span class="text-xs font-semibold text-slate-600">${customTasks.length} total</span>
+                            </div>
+
+                            <div class="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                                ${dailyTasksHtml.length > 0 ? dailyTasksHtml : '<p class="text-xs text-slate-600 italic py-2">No tasks added yet for today.</p>'}
+                            </div>
+
+                            <div class="flex items-center gap-2 pt-2 border-t border-slate-800">
+                                <input type="text" id="daily-task-input" 
+                                       class="task-input py-2" placeholder="+ Add a task for today..."
+                                       onkeydown="if(event.key==='Enter') addDailyViewCustomTask('${dateKey}')">
+                                <button onclick="addDailyViewCustomTask('${dateKey}')" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-colors">
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /* ---------------- DATA STORAGE & ACTIONS ---------------- */
+        function saveHabit(dateKey, key, val) {
+            localStorage.setItem(`${dateKey}-${key}`, val);
+            if (currentView === 'day') renderCurrentView();
+        }
+
+        function saveWeight(dateKey, val) {
+            localStorage.setItem(`${dateKey}-weight`, val);
+            if (document.getElementById('graph-container').classList.contains('hidden') === false) {
+                updateChart();
+            }
+        }
+
+        function saveExerciseLog(dateKey, exerciseIdx, field, val) {
+            localStorage.setItem(`${dateKey}-ex-${exerciseIdx}-${field}`, val);
+        }
+
+        function toggleWorkout(dateKey) {
+            const current = localStorage.getItem(`${dateKey}-workout`) === 'true';
+            localStorage.setItem(`${dateKey}-workout`, !current);
+            renderCurrentView();
+        }
+
+        function addCustomTask(dateKey) {
+            const input = document.getElementById(`task-input-${dateKey}`);
+            const text = input.value.trim();
+            if (!text) return;
+            const tasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+            tasks.push({ text: text, completed: false });
+            localStorage.setItem(`${dateKey}-tasks`, JSON.stringify(tasks));
+            input.value = '';
+            renderCurrentView();
+        }
+
+        function addDailyViewCustomTask(dateKey) {
+            const input = document.getElementById('daily-task-input');
+            const text = input.value.trim();
+            if (!text) return;
+            const tasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+            tasks.push({ text: text, completed: false });
+            localStorage.setItem(`${dateKey}-tasks`, JSON.stringify(tasks));
+            input.value = '';
+            renderCurrentView();
+        }
+
+        function toggleCustomTask(dateKey, index) {
+            const tasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+            if (tasks[index]) {
+                tasks[index].completed = !tasks[index].completed;
+                localStorage.setItem(`${dateKey}-tasks`, JSON.stringify(tasks));
+                renderCurrentView();
+            }
+        }
+
+        function removeCustomTask(dateKey, index) {
+            const tasks = JSON.parse(localStorage.getItem(`${dateKey}-tasks`) || '[]');
+            tasks.splice(index, 1);
+            localStorage.setItem(`${dateKey}-tasks`, JSON.stringify(tasks));
+            renderCurrentView();
+        }
+
+        /* ---------------- MODAL FOR WEEK VIEW ---------------- */
+        function showDetailsModal(type, dateKey) {
+            const workout = workoutData[type];
+            const modal = document.getElementById('modal');
+            const parts = dateKey.split('-');
+            const displayDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
+            const formattedDate = displayDate.toLocaleDateString('en-US', {
+                weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+            });
+
+            document.getElementById('modal-title').innerText = type;
+            document.getElementById('modal-subtitle').innerText = `Logging for ${formattedDate}`;
+            
+            const isLifting = type.includes('Upper') || type.includes('Lower');
+
+            let html = `<div class="space-y-3">`;
+            workout.exercises.forEach((ex, idx) => {
+                const weightVal = localStorage.getItem(`${dateKey}-ex-${idx}-weight`) || '';
+                const repsVal = localStorage.getItem(`${dateKey}-ex-${idx}-reps`) || '';
+                const notesVal = localStorage.getItem(`${dateKey}-ex-${idx}-notes`) || '';
+
+                html += `
+                    <div class="p-3.5 bg-slate-900/70 rounded-xl border border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-slate-600 transition-colors">
+                        <div class="flex items-start gap-3 flex-1 min-w-0">
+                            <div class="mt-1.5 w-2.5 h-2.5 rounded-full bg-${workout.color}-500 flex-shrink-0 shadow-[0_0_8px_rgba(255,255,255,0.15)]"></div>
+                            <div class="min-w-0">
+                                <h4 class="font-bold text-slate-100 text-sm">${ex.name}</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5 leading-snug">${ex.muscle}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800">
+                `;
+
+                if (isLifting) {
+                    html += `
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weight</label>
+                            <input type="text" value="${weightVal}" 
+                                   placeholder="lbs" 
+                                   class="log-input w-20 text-center font-semibold"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'weight', this.value)">
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reps</label>
+                            <input type="text" value="${repsVal}" 
+                                   placeholder="e.g. 10,8,8" 
+                                   class="log-input w-24 text-center font-semibold"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'reps', this.value)">
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="flex items-center gap-1.5 w-full md:w-auto">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Notes</label>
+                            <input type="text" value="${notesVal}" 
+                                   placeholder="Time, distance, pace..." 
+                                   class="log-input w-full md:w-48 text-left"
+                                   onchange="saveExerciseLog('${dateKey}', ${idx}, 'notes', this.value)">
+                        </div>
+                    `;
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            
+            document.getElementById('modal-content').innerHTML = html;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('modal').classList.remove('flex');
+        }
+
+        /* ---------------- WEIGHT CHART LOGIC ---------------- */
+        function toggleGraph() {
+            const container = document.getElementById('graph-container');
+            const chevron = document.getElementById('graph-chevron');
+            container.classList.toggle('hidden');
+            chevron.style.transform = container.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+            
+            if (!container.classList.contains('hidden')) {
+                updateChart();
+            }
+        }
+
+        function updateChart() {
+            const history = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.endsWith('-weight')) {
+                    const date = key.replace('-weight', '');
+                    const val = parseFloat(localStorage.getItem(key));
+                    if (!isNaN(val)) {
+                        history.push({ date, val });
+                    }
+                }
+            }
+
+            history.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const labels = history.map(h => h.date);
+            const values = history.map(h => h.val);
+
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            
+            if (weightChart) {
+                weightChart.destroy();
+            }
+
+            weightChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Weight (lbs)',
+                        data: values,
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        pointBackgroundColor: '#38bdf8',
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.onclick = (e) => { if (e.target.id === 'modal') closeModal(); }
+        window.onload = renderCurrentView;
+    </script>
+</body>
+</html>
